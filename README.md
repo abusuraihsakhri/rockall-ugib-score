@@ -1,95 +1,130 @@
-# Rockall Score for Upper GI Bleeding
+# Rockall Ugib Score
 
-> **Post-endoscopy Mortality and Rebleeding Risk Assessment**
+> **Domain:** Clinical Decision Support & Biomedical Computing  
+> **Reference Guidelines & Standards:** `Standard Clinical Formulations & ISO/IEC Quality Frameworks`
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg)
+<div align="center">
 
----
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg?logo=fastapi&logoColor=white)
+![Audit Trail](https://img.shields.io/badge/Audit-HMAC--SHA256_Tamper--Evident-brightgreen.svg)
+![Zero-PHI Guard](https://img.shields.io/badge/Guard-Zero--PHI_Outbound-blue.svg)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)
 
-## Overview
-
-The Rockall Score is a validated scoring system for assessing mortality and rebleeding risk after acute upper gastrointestinal hemorrhage. It combines clinical (pre-endoscopy) and endoscopic (post-endoscopy) components.
-
-**Score range: 0-11** (Clinical: 0-7, Endoscopic: 0-4)
-
----
-
-## Scoring Components
-
-### Clinical (Pre-endoscopy)
-
-| Component | Points |
-|-----------|--------|
-| **Age** | <60: **0**, 60-79: **1**, ≥80: **2** |
-| **Shock** | HR>100 & SBP≥100: **1**, SBP<100: **2** |
-| **Comorbidity** | None: **0**, CHF/IHD: **2**, Renal/Liver failure/Malignancy: **3** |
-
-### Endoscopic (Post-endoscopy)
-
-| Component | Points |
-|-----------|--------|
-| **Diagnosis** | Mallory-Weiss/None: **0**, Peptic ulcer/ESD: **1**, Cancer: **2** |
-| **Major stigmata** | None/Dark spot: **0**, Blood/Visible vessel/Active bleeding: **2** |
-
-## Mortality Risk by Total Score
-
-| Score | Mortality | Risk Category |
-|-------|-----------|---------------|
-| 0 | 0.2% | Low |
-| 1 | 0.4% | Low |
-| 2 | 2.2% | Low |
-| 3 | 3.3% | Moderate |
-| 4 | 5.3% | Moderate |
-| 5-6 | 8% | High |
-| 7-8 | 14% | High |
-| ≥9 | 27% | Very High |
+</div>
 
 ---
 
-## Quick Start
+## 📖 What It Does
+
+Rockall Score for Upper Gastrointestinal Bleeding (UGIB)
+Calculates pre-endoscopy (clinical) and post-endoscopy (total) Rockall scores
+for mortality and rebleeding risk assessment.
+
+Score range: 0-11 (clinical 0-7, endoscopic 0-4).
+
+References:
+  - Rockall TA, et al. Risk assessment after acute upper gastrointestinal
+    haemorrhage. Gut 1996;38:316-21.
+  - Rockall TA, et al. Gut 1996;38:322-7 (validation cohort).
+
+Author: Dr. Abu Suraih Sakhri
+License: MIT
+
+---
+
+## ⚙️ Key Capabilities & Algorithmic Modules
+
+### 🔬 Analytical Functions
+
+- **`calculate_rockall()`**: Calculate Rockall Score for upper GI bleeding.
+
+Parameters:
+    age: Patient age in years
+    shock_hr: Heart rate in bpm (for shock assessment)
+    shock_sbp: Systolic blood pressure in mmHg (for shock assessment)
+    comorbidity: 'none', 'cardiac' (CHF/IHD), or 'major' (renal/liver failure, malignancy)
+    endoscopic_diagnosis: 'none'/'mallory-weiss', 'peptic_ulcer'/'esd', or 'cancer'
+    major_stigmata: 'none'/'dark_spot', or 'blood'/'visible_vessel'/'active_bleeding'
+
+Returns:
+    Dict with clinical_score, endoscopic_score, total_score, mortality/rebleeding risk.
+- **`calculate_rockall_from_dict()`**: Calculate Rockall score from a dictionary of parameters.
+- **`process_batch()`**: Process a CSV file of patients and write Rockall scores.
+- **`main()`** — calculates and validates main parameters.
+
+---
+
+## 📐 Mathematical Formulation & Logic
+
+```text
+  Calculates pre-endoscopy (clinical) and post-endoscopy (total) Rockall scores
+  Calculate Rockall Score for upper GI bleeding.
+  clinical_score = 0
+  endo_score = 0
+  risk = "Low"
+```
+
+---
+
+## 💻 CLI Quickstart & Usage
+
+### 1. Guided Interactive Mode
+```bash
+python cli.py
+```
+
+### 2. Direct Parameterized Evaluation
+```bash
+python cli.py --input data.csv
+```
+
+### Parameter Reference
+- `--interactive`: Launch guided terminal interactive wizard.
+- `--input <path>`: Evaluate input from JSON or CSV specification.
+- `--json`: Output deterministic structured results in JSON format.
+
+### Input Data Schema
+
+| Field | Description | Requirement |
+|:------|:------------|:------------|
+| `Patient_ID` | Parameter / observation metric | Required |
+| `v1` | Parameter / observation metric | Required |
+| `v2` | Parameter / observation metric | Required |
+| `v3` | Parameter / observation metric | Required |
+
+---
+
+## 🛡️ Security & Enterprise Architecture
+
+* **Zero-PHI Outbound Interceptor:** Active AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
+* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition.
+* **Air-Gapped LLM Reasoning Adapter:** Agnostic integration for local Ollama instances (`llama3`, `mistral`), Claude 3.5 Sonnet, GPT-4o, and deterministic test mocks.
+* **Active Learning Bayesian Calibration:** Dynamic tracker updating worker reliability weights and monitoring Brier calibration drift.
+* **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
+
+---
+
+## 🧪 Testing & Verification
+
+Run the automated test suite:
 
 ```bash
-# Single patient (clinical only)
-python rockall_score.py single --age 70 --sbp 85 --comorbidity cardiac
-
-# Full post-endoscopy score
-python rockall_score.py single --age 70 --sbp 85 --comorbidity cardiac --diagnosis peptic_ulcer --stigmata active_bleeding
-
-# Batch processing
-python rockall_score.py batch -i patients.csv -o results.csv
+pytest -v
 ```
 
-## Python API
-
-```python
-from rockall_score import calculate_rockall
-
-result = calculate_rockall(
-    age=70, shock_hr=110, shock_sbp=85,
-    comorbidity="cardiac",
-    endoscopic_diagnosis="peptic_ulcer",
-    major_stigmata="active_bleeding",
-)
-
-print(f"Clinical Score: {result['clinical_score']}")
-print(f"Endoscopic Score: {result['endoscopic_score']}")
-print(f"Total Score: {result['total_score']}")
-print(f"Mortality: {result['mortality_percent']}%")
-print(f"Rebleeding: {result['rebleeding_percent']}%")
-```
-
-## Tests
+Execute high-throughput batch simulation benchmarks:
 
 ```bash
-python -m pytest test_rockall_score.py -v
+python simulator.py --tasks 1000 --concurrency 8
 ```
 
-## References
+---
 
-- Rockall TA, et al. Risk assessment after acute upper gastrointestinal haemorrhage. *Gut* 1996;38:316-21.
-- Rockall TA, et al. Validation of a scoring system for assessment of prognosis after acute upper gastrointestinal haemorrhage. *Gut* 1996;38:322-7.
+## 🐳 Container Deployment
 
-## License
-
-MIT License. See [LICENSE](LICENSE).
+```bash
+docker build -t rockall-ugib-score .
+docker run -p 8000:8000 rockall-ugib-score
+```
