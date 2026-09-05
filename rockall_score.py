@@ -59,6 +59,14 @@ def calculate_rockall(
     Returns:
         Dict with clinical_score, endoscopic_score, total_score, mortality/rebleeding risk.
     """
+    # --- Input validation ---
+    if age is not None and (age < 0 or age > 150):
+        raise ValueError(f"Age must be between 0 and 150, got {age}")
+    if shock_hr is not None and (shock_hr < 0 or shock_hr > 300):
+        raise ValueError(f"Heart rate must be between 0 and 300 bpm, got {shock_hr}")
+    if shock_sbp is not None and (shock_sbp < 0 or shock_sbp > 300):
+        raise ValueError(f"Systolic BP must be between 0 and 300 mmHg, got {shock_sbp}")
+
     clinical_score = 0
     clinical_components = {}
 
@@ -168,8 +176,23 @@ def calculate_rockall_from_dict(params: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
+def _validate_file_path(filepath: str, must_exist: bool = False) -> str:
+    """Validate file path for security - prevent path traversal."""
+    import os
+    # Normalize the path
+    normalized = os.path.normpath(filepath)
+    # Reject paths that try to traverse outside current directory
+    if normalized.startswith("..") or normalized.startswith("/") or normalized.startswith("\\"):
+        raise ValueError(f"Invalid file path (path traversal attempt): {filepath}")
+    if must_exist and not os.path.isfile(normalized):
+        raise FileNotFoundError(f"Input file not found: {filepath}")
+    return normalized
+
+
 def process_batch(input_csv: str, output_csv: str) -> int:
     """Process a CSV file of patients and write Rockall scores."""
+    input_csv = _validate_file_path(input_csv, must_exist=True)
+    output_csv = _validate_file_path(output_csv, must_exist=False)
     with open(input_csv, mode="r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         fieldnames = list(reader.fieldnames or [])
@@ -231,6 +254,17 @@ def main(argv=None):
     p_batch.add_argument("-i", "--input", required=True, help="Input CSV file")
     p_batch.add_argument("-o", "--output", default="results.csv", help="Output CSV file")
 
+    # Audit trail verification
+    p_audit = subparsers.add_parser("audit", help="Process a task through the audit system")
+    p_audit.add_argument("--task-id", required=True, help="Task identifier for audit processing")
+
+    # Chat/Query interface
+    p_chat = subparsers.add_parser("chat", help="Query the supervisory chat system")
+    p_chat.add_argument("query", nargs="+", help="Query string for the chat system")
+
+    # Verify audit integrity
+    p_verify = subparsers.add_parser("verify-audit", help="Verify HMAC audit trail integrity")
+
     args = parser.parse_args(argv)
 
     if args.command == "single":
@@ -244,6 +278,31 @@ def main(argv=None):
 
     elif args.command == "batch":
         process_batch(args.input, args.output)
+
+    elif args.command == "audit":
+        from agents.supervisor import SystemSupervisor
+        from agents.models import SystemTaskPayload
+        supervisor = SystemSupervisor(model_provider="mock")
+        payload = SystemTaskPayload(
+            task_id=args.task_id,
+            target_identifier="CLI-AUDIT",
+            primary_metric=0.0,
+        )
+        dossier = supervisor.process_task(payload)
+        print(json.dumps(dossier.to_dict(), indent=2, default=str))
+
+    elif args.command == "chat":
+        from agents.supervisor import SystemSupervisor
+        supervisor = SystemSupervisor(model_provider="mock")
+        query = " ".join(args.query)
+        response = supervisor.query_supervisory_chat(query)
+        print(json.dumps({"query": query, "response": response}, indent=2))
+
+    elif args.command == "verify-audit":
+        from agents.base import AuditLogger
+        is_valid = AuditLogger.verify_integrity()
+        trail_len = len(AuditLogger.get_trail())
+        print(json.dumps({"integrity_valid": is_valid, "trail_length": trail_len}, indent=2))
 
     return 0
 

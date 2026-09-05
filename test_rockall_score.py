@@ -281,5 +281,64 @@ class TestFromDict:
         assert result["total_score"] == 0
 
 
+# =============================================================================
+# Input Validation Tests
+# =============================================================================
+
+class TestInputValidation:
+    def test_negative_age_raises(self):
+        with pytest.raises(ValueError, match="Age must be between"):
+            calculate_rockall(age=-5)
+
+    def test_unrealistic_age_raises(self):
+        with pytest.raises(ValueError, match="Age must be between"):
+            calculate_rockall(age=200)
+
+    def test_negative_hr_raises(self):
+        with pytest.raises(ValueError, match="Heart rate must be between"):
+            calculate_rockall(shock_hr=-10)
+
+    def test_unrealistic_hr_raises(self):
+        with pytest.raises(ValueError, match="Heart rate must be between"):
+            calculate_rockall(shock_hr=400)
+
+    def test_negative_sbp_raises(self):
+        with pytest.raises(ValueError, match="Systolic BP must be between"):
+            calculate_rockall(shock_sbp=-50)
+
+    def test_unrealistic_sbp_raises(self):
+        with pytest.raises(ValueError, match="Systolic BP must be between"):
+            calculate_rockall(shock_sbp=350)
+
+    def test_valid_boundary_values(self):
+        # Minimal valid values (no shock since sbp >= 100)
+        result = calculate_rockall(age=0, shock_hr=0, shock_sbp=100)
+        assert result["total_score"] == 0
+
+        # Maximum valid values
+        result = calculate_rockall(age=150, shock_hr=300, shock_sbp=300)
+        assert result["total_score"] > 0
+
+
+# =============================================================================
+# Path Traversal Protection Tests
+# =============================================================================
+
+class TestPathTraversalProtection:
+    def test_path_traversal_blocked_input(self, tmp_path):
+        with pytest.raises(ValueError, match="path traversal"):
+            process_batch("../etc/passwd", "output.csv")
+
+    def test_path_traversal_blocked_output(self, tmp_path):
+        csv_in = tmp_path / "in.csv"
+        csv_in.write_text("age,sbp\n70,85\n", encoding="utf-8")
+        with pytest.raises(ValueError, match="path traversal"):
+            process_batch(str(csv_in), "../etc/output.csv")
+
+    def test_missing_input_file_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            process_batch(str(tmp_path / "nonexistent.csv"), str(tmp_path / "out.csv"))
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
