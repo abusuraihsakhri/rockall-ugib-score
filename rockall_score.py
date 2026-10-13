@@ -1,40 +1,68 @@
 #!/usr/bin/env python3
+"""Rockall score for upper gastrointestinal bleeding.
+
+Pre-endoscopy score 0-7; complete score 0-11. Historical outcome frequencies
+are observations from the original Rockall cohort, not individualized risks.
+See README.md for source and clinical limitations.
 """
-Rockall Score for Upper Gastrointestinal Bleeding (UGIB)
-Calculates pre-endoscopy (clinical) and post-endoscopy (total) Rockall scores
-for mortality and rebleeding risk assessment.
-
-Score range: 0-11 (clinical 0-7, endoscopic 0-4).
-
-References:
-  - Rockall TA, et al. Risk assessment after acute upper gastrointestinal
-    haemorrhage. Gut 1996;38:316-21.
-  - Rockall TA, et al. Gut 1996;38:322-7 (validation cohort).
-
-Author: Dr. Abu Suraih Sakhri
-License: MIT
-"""
-
 import argparse
 import csv
 import json
-import sys
-from typing import Dict, Any, Optional
+import math
+import os
+from pathlib import Path
+from typing import Any, Dict, Optional
 
+# Original-cohort OBSERVED frequencies by complete Rockall score, in percent.
+# All complete scores 8-11 share the reported >=8 cohort (not extrapolations).
+MORTALITY_RATES = {0: 0.0, 1: 0.0, 2: 0.2, 3: 2.9, 4: 5.3, 5: 10.8,
+                   6: 17.3, 7: 27.0, 8: 41.1, 9: 41.1, 10: 41.1, 11: 41.1}
+REBLEEDING_RATES = {0: 4.9, 1: 3.4, 2: 5.3, 3: 11.2, 4: 14.1, 5: 24.1,
+                    6: 32.9, 7: 43.8, 8: 41.8, 9: 41.8, 10: 41.8, 11: 41.8}
+CLINICAL_MORTALITY_RATES = {0: 0.2, 1: 2.4, 2: 5.6, 3: 11.0, 4: 24.6,
+                            5: 39.6, 6: 48.9, 7: 50.0}
 
-# Mortality rates by total Rockall score (Rockall et al. 1996)
-MORTALITY_RATES = {
-    0: 0.2, 1: 0.4, 2: 2.2, 3: 3.3, 4: 5.3,
-    5: 8.0, 6: 8.0, 7: 14.0, 8: 14.0, 9: 27.0,
-    10: 27.0, 11: 27.0,
+COMORBIDITIES = {
+    "none": 0,
+    "cardiac": 2, "chf": 2, "ihd": 2, "cardiac_failure": 2,
+    "ischemic_heart_disease": 2, "heart_failure": 2,
+    "other_major": 2, "other_major_comorbidity": 2,
+    "major": 3, "renal": 3, "liver": 3, "renal_failure": 3,
+    "liver_failure": 3, "disseminated_malignancy": 3,
+    "renal_liver_malignancy": 3,
+}
+DIAGNOSES = {
+    "none": 0, "mallory-weiss": 0, "mallory_weiss": 0,
+    "other": 1, "peptic_ulcer": 1, "esd": 1, "erosive_disease": 1,
+    "duodenal_ulcer": 1, "gastric_ulcer": 1, "peptic": 1, "ulcer": 1,
+    "cancer": 2, "malignant": 2, "gastric_cancer": 2,
+    "esophageal_cancer": 2,
+}
+STIGMATA = {
+    "none": 0, "dark_spot": 0,
+    "blood": 2, "visible_vessel": 2, "active_bleeding": 2,
+    "active": 2, "vessel": 2, "blood_in_ugit": 2, "adherent_clot": 2,
 }
 
-# Rebleeding rates by total Rockall score
-REBLEEDING_RATES = {
-    0: 2.0, 1: 3.0, 2: 5.0, 3: 8.0, 4: 12.0,
-    5: 18.0, 6: 22.0, 7: 30.0, 8: 35.0, 9: 40.0,
-    10: 45.0, 11: 50.0,
-}
+
+def _category(value: str, mapping: dict, label: str) -> int:
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be text")
+    key = value.strip().lower()
+    if key not in mapping:
+        raise ValueError(f"Unknown {label}: {value!r}; expected one of {', '.join(sorted(mapping))}")
+    return mapping[key]
+
+
+def _number(value: Optional[float], name: str, maximum: float) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a finite number")
+    number = float(value)
+    if not math.isfinite(number) or number <= 0 or number > maximum:
+        raise ValueError(f"{name} must be greater than 0 and at most {maximum}, got {value}")
+    return number
 
 
 def calculate_rockall(
@@ -42,179 +70,150 @@ def calculate_rockall(
     shock_hr: Optional[float] = None,
     shock_sbp: Optional[float] = None,
     comorbidity: str = "none",
-    endoscopic_diagnosis: str = "none",
-    major_stigmata: str = "none",
+    endoscopic_diagnosis: Optional[str] = None,
+    major_stigmata: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Calculate available score components without inventing missing data.
+
+    A complete Rockall score is returned only when all five components are
+    known. Clinical score is numeric but marked incomplete unless age, shock
+    and comorbidity are known. SBP <100 establishes the shock component
+    independently of HR; otherwise BOTH BP and pulse are needed.
     """
-    Calculate Rockall Score for upper GI bleeding.
-
-    Parameters:
-        age: Patient age in years
-        shock_hr: Heart rate in bpm (for shock assessment)
-        shock_sbp: Systolic blood pressure in mmHg (for shock assessment)
-        comorbidity: 'none', 'cardiac' (CHF/IHD), or 'major' (renal/liver failure, malignancy)
-        endoscopic_diagnosis: 'none'/'mallory-weiss', 'peptic_ulcer'/'esd', or 'cancer'
-        major_stigmata: 'none'/'dark_spot', or 'blood'/'visible_vessel'/'active_bleeding'
-
-    Returns:
-        Dict with clinical_score, endoscopic_score, total_score, mortality/rebleeding risk.
-    """
-    # --- Input validation ---
-    if age is not None and (age < 0 or age > 150):
-        raise ValueError(f"Age must be between 0 and 150, got {age}")
-    if shock_hr is not None and (shock_hr < 0 or shock_hr > 300):
-        raise ValueError(f"Heart rate must be between 0 and 300 bpm, got {shock_hr}")
-    if shock_sbp is not None and (shock_sbp < 0 or shock_sbp > 300):
-        raise ValueError(f"Systolic BP must be between 0 and 300 mmHg, got {shock_sbp}")
-
-    clinical_score = 0
-    clinical_components = {}
-
-    # --- Age ---
+    if age is not None and (isinstance(age, bool) or not isinstance(age, int)
+                            or age < 0 or age > 150):
+        raise ValueError(f"Age must be between 0 and 150 whole years, got {age}")
+    hr = _number(shock_hr, "Heart rate", 300)
+    sbp = _number(shock_sbp, "Systolic BP", 300)
+    clinical = {}
     if age is not None:
-        if age >= 80:
-            clinical_components["age"] = 2
-        elif age >= 60:
-            clinical_components["age"] = 1
-        else:
-            clinical_components["age"] = 0
-        clinical_score += clinical_components["age"]
+        clinical["age"] = 2 if age >= 80 else (1 if age >= 60 else 0)
+    if sbp is not None and sbp < 100:
+        clinical["shock"] = 2
+    elif sbp is not None and hr is not None:
+        clinical["shock"] = 1 if hr >= 100 else 0
+    clinical["comorbidity"] = _category(comorbidity, COMORBIDITIES, "comorbidity")
+    clinical_score = sum(clinical.values())
+    clinical_complete = "age" in clinical and "shock" in clinical
 
-    # --- Shock ---
-    if shock_hr is not None or shock_sbp is not None:
-        hr = shock_hr if shock_hr is not None else 0
-        sbp = shock_sbp if shock_sbp is not None else 200
-        if sbp < 100:
-            clinical_components["shock"] = 2
-        elif hr > 100:
-            clinical_components["shock"] = 1
-        else:
-            clinical_components["shock"] = 0
-        clinical_score += clinical_components["shock"]
+    endoscopic = {}
+    if endoscopic_diagnosis is not None:
+        endoscopic["diagnosis"] = _category(endoscopic_diagnosis, DIAGNOSES, "diagnosis")
+    if major_stigmata is not None:
+        endoscopic["major_stigmata"] = _category(major_stigmata, STIGMATA, "stigmata")
+    endoscopic_complete = len(endoscopic) == 2
+    if endoscopic_complete and endoscopic_diagnosis.strip().lower() == "none" and endoscopic["major_stigmata"]:
+        raise ValueError("No lesion with major bleeding stigmata is inconsistent; choose 'other' diagnosis")
 
-    # --- Comorbidity ---
-    comorb_lower = comorbidity.lower().strip()
-    if comorb_lower in ("major", "renal", "liver", "malignancy", "renal_failure",
-                         "liver_failure", "disseminated_malignancy",
-                         "renal_liver_malignancy"):
-        clinical_components["comorbidity"] = 3
-    elif comorb_lower in ("cardiac", "chf", "ihd", "cardiac_failure",
-                           "ischemic_heart_disease", "heart_failure"):
-        clinical_components["comorbidity"] = 2
-    else:
-        clinical_components["comorbidity"] = 0
-    clinical_score += clinical_components["comorbidity"]
+    endoscopic_score = sum(endoscopic.values())
+    score_complete = clinical_complete and endoscopic_complete
+    total = clinical_score + endoscopic_score if score_complete else None
 
-    # --- Endoscopic components ---
-    endo_score = 0
-    endo_components = {}
-
-    # Diagnosis
-    diag_lower = endoscopic_diagnosis.lower().strip()
-    if diag_lower in ("cancer", "malignant", "gastric_cancer", "esophageal_cancer"):
-        endo_components["diagnosis"] = 2
-    elif diag_lower in ("peptic_ulcer", "esd", "erosive_disease", "duodenal_ulcer",
-                         "gastric_ulcer", "peptic", "ulcer"):
-        endo_components["diagnosis"] = 1
-    else:
-        endo_components["diagnosis"] = 0
-    endo_score += endo_components["diagnosis"]
-
-    # Major stigmata of recent hemorrhage
-    stig_lower = major_stigmata.lower().strip()
-    if stig_lower in ("blood", "visible_vessel", "active_bleeding",
-                       "active", "vessel", "blood_in_ugit", "adherent_clot"):
-        endo_components["major_stigmata"] = 2
-    else:
-        endo_components["major_stigmata"] = 0
-    endo_score += endo_components["major_stigmata"]
-
-    total = clinical_score + endo_score
-
-    # Mortality and rebleeding risk
-    mortality_pct = MORTALITY_RATES.get(min(total, 11), 27.0)
-    rebleeding_pct = REBLEEDING_RATES.get(min(total, 11), 50.0)
-
-    # Risk category
-    if total <= 2:
-        risk = "Low"
-        recommendation = "Low risk of rebleeding and mortality. Consider early discharge with outpatient follow-up."
-    elif total <= 4:
-        risk = "Moderate"
-        recommendation = "Moderate risk. Inpatient monitoring recommended. Endoscopic therapy as indicated."
-    elif total <= 6:
-        risk = "High"
-        recommendation = "High risk. ICU monitoring, aggressive resuscitation, endoscopic intervention required."
-    else:
-        risk = "Very High"
-        recommendation = "Very high mortality risk. ICU care, consider interventional radiology or surgical consult."
-
+    # A clinical subtotal and a full Rockall score are DIFFERENT scales.
     return {
         "tool": "rockall-score",
         "clinical_score": clinical_score,
-        "clinical_components": clinical_components,
-        "endoscopic_score": endo_score,
-        "endoscopic_components": endo_components,
+        "clinical_complete": clinical_complete,
+        "clinical_components": clinical,
+        "endoscopic_score": endoscopic_score,
+        "endoscopic_complete": endoscopic_complete,
+        "endoscopic_components": endoscopic,
+        "partial_score": clinical_score + endoscopic_score,
         "total_score": total,
+        "score_complete": score_complete,
         "max_possible_score": 11,
-        "mortality_percent": mortality_pct,
-        "rebleeding_percent": rebleeding_pct,
-        "risk_category": risk,
-        "recommendation": recommendation,
+        "clinical_mortality_percent": (
+            CLINICAL_MORTALITY_RATES[clinical_score] if clinical_complete else None
+        ),
+        "mortality_percent": MORTALITY_RATES[total] if score_complete else None,
+        "rebleeding_percent": REBLEEDING_RATES[total] if score_complete else None,
+        "risk_category": "Historical low-score group" if score_complete and total <= 2 else (
+            "Higher score" if score_complete else None
+        ),
+        "recommendation": (
+            "Historical cohort frequencies are not individualized predictions. "
+            "Do not use Rockall alone to decide admission, discharge or treatment; "
+            "use clinical assessment and current UGIB guidelines."
+        ),
     }
 
 
+def _pick(params: Dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in params and params[key] is not None and str(params[key]).strip() != "":
+            return params[key]
+    return None
+
+
+def _float_or_none(value: Any) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        value = float(value)
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise ValueError(f"Invalid numeric value: {value!r}") from exc
+    if not math.isfinite(value):
+        raise ValueError("Numeric inputs must be finite")
+    return value
+
+
+def _int_or_none(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    parsed = _float_or_none(value)
+    if not parsed.is_integer():
+        raise ValueError(f"Age must be a whole number: {value!r}")
+    return int(parsed)
+
+
 def calculate_rockall_from_dict(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Calculate Rockall score from a dictionary of parameters."""
+    """Calculate using CLI/CSV key aliases; invalid values are never silently ignored."""
     return calculate_rockall(
-        age=_int_or_none(params.get("age")),
-        shock_hr=_float_or_none(params.get("heart_rate") or params.get("hr") or params.get("shock_hr")),
-        shock_sbp=_float_or_none(params.get("sbp") or params.get("shock_sbp")),
-        comorbidity=str(params.get("comorbidity", "none")),
-        endoscopic_diagnosis=str(params.get("diagnosis") or params.get("endoscopic_diagnosis", "none")),
-        major_stigmata=str(params.get("stigmata") or params.get("major_stigmata", "none")),
+        age=_int_or_none(_pick(params, "age")),
+        shock_hr=_float_or_none(_pick(params, "heart_rate", "hr", "shock_hr")),
+        shock_sbp=_float_or_none(_pick(params, "sbp", "shock_sbp")),
+        comorbidity=_pick(params, "comorbidity") or "none",
+        endoscopic_diagnosis=_pick(params, "diagnosis", "endoscopic_diagnosis"),
+        major_stigmata=_pick(params, "stigmata", "major_stigmata"),
     )
 
 
 def _validate_file_path(filepath: str, must_exist: bool = False) -> str:
-    """Validate file path for security - prevent path traversal."""
-    import os
-    # Normalize the path
-    normalized = os.path.normpath(filepath)
-    # Reject paths that try to traverse outside current directory
-    if normalized.startswith("..") or normalized.startswith("/") or normalized.startswith("\\"):
-        raise ValueError(f"Invalid file path (path traversal attempt): {filepath}")
-    if must_exist and not os.path.isfile(normalized):
+    """Accept ordinary absolute CLI paths; reject relative parent traversal."""
+    path = Path(filepath).expanduser()
+    if not path.is_absolute() and ".." in path.parts:
+        raise ValueError(f"Invalid file path (path traversal): {filepath}")
+    if must_exist and not path.is_file():
         raise FileNotFoundError(f"Input file not found: {filepath}")
-    return normalized
+    return str(path)
 
 
 def process_batch(input_csv: str, output_csv: str) -> int:
-    """Process a CSV file of patients and write Rockall scores."""
+    """Read UTF-8 CSV and write scored CSV; fail before writing on invalid rows."""
     input_csv = _validate_file_path(input_csv, must_exist=True)
-    output_csv = _validate_file_path(output_csv, must_exist=False)
-    with open(input_csv, mode="r", encoding="utf-8-sig") as f:
+    output_csv = _validate_file_path(output_csv)
+    if os.path.realpath(input_csv) == os.path.realpath(output_csv):
+        raise ValueError("Input and output paths must differ")
+    with open(input_csv, mode="r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         fieldnames = list(reader.fieldnames or [])
+        if not fieldnames:
+            raise ValueError("Input CSV must have a header row")
         rows = list(reader)
 
-    out_fields = fieldnames + [
-        "clinical_score", "endoscopic_score", "total_score",
-        "mortality_percent", "rebleeding_percent", "risk_category", "recommendation",
-    ]
+    out_fields = list(dict.fromkeys(fieldnames + [
+        "clinical_score", "clinical_complete", "endoscopic_score",
+        "endoscopic_complete", "total_score", "score_complete",
+        "clinical_mortality_percent", "mortality_percent",
+        "rebleeding_percent", "risk_category", "recommendation",
+    ]))
     out_rows = []
-    for r in rows:
-        result = calculate_rockall_from_dict(r)
-        row_dict = dict(r)
-        row_dict["clinical_score"] = result["clinical_score"]
-        row_dict["endoscopic_score"] = result["endoscopic_score"]
-        row_dict["total_score"] = result["total_score"]
-        row_dict["mortality_percent"] = result["mortality_percent"]
-        row_dict["rebleeding_percent"] = result["rebleeding_percent"]
-        row_dict["risk_category"] = result["risk_category"]
-        row_dict["recommendation"] = result["recommendation"]
-        out_rows.append(row_dict)
-
+    for line, row in enumerate(rows, start=2):
+        try:
+            score = calculate_rockall_from_dict(row)
+        except ValueError as exc:
+            raise ValueError(f"CSV line {line}: {exc}") from exc
+        out_rows.append({**row, **{k: score[k] for k in out_fields if k in score}})
     with open(output_csv, mode="w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=out_fields)
         writer.writeheader()
@@ -240,12 +239,12 @@ def main(argv=None):
     p_single.add_argument("--hr", type=float, help="Heart rate in bpm")
     p_single.add_argument("--sbp", type=float, help="Systolic blood pressure in mmHg")
     p_single.add_argument("--comorbidity", default="none",
-                          choices=["none", "cardiac", "major"],
+                          choices=["none", "cardiac", "other_major", "major", "renal_failure", "liver_failure", "disseminated_malignancy"],
                           help="Comorbidity category")
-    p_single.add_argument("--diagnosis", default="none",
-                          choices=["none", "peptic_ulcer", "cancer"],
+    p_single.add_argument("--diagnosis", default=None,
+                          choices=["none", "mallory_weiss", "other", "peptic_ulcer", "cancer"],
                           help="Endoscopic diagnosis")
-    p_single.add_argument("--stigmata", default="none",
+    p_single.add_argument("--stigmata", default=None,
                           choices=["none", "dark_spot", "blood", "visible_vessel", "active_bleeding"],
                           help="Major stigmata of recent hemorrhage")
 
@@ -306,27 +305,6 @@ def main(argv=None):
 
     return 0
 
-
-# =============================================================================
-# Helpers
-# =============================================================================
-
-def _float_or_none(val) -> Optional[float]:
-    if val is None or val == "":
-        return None
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return None
-
-
-def _int_or_none(val) -> Optional[int]:
-    if val is None or val == "":
-        return None
-    try:
-        return int(float(val))
-    except (ValueError, TypeError):
-        return None
 
 
 if __name__ == "__main__":

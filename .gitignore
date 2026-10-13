@@ -62,3 +62,8 @@ output.csv
 venv/
 env/
 .venv/
+
+# Secrets
+.env
+.env.*
+!.env.example

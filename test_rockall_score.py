@@ -148,38 +148,35 @@ class TestMajorStigmata:
 # =============================================================================
 
 class TestMortalityRisk:
-    def test_mortality_score_0(self):
-        result = calculate_rockall(age=40, shock_hr=70, shock_sbp=130)
-        assert result["total_score"] == 0
-        assert result["mortality_percent"] == 0.2
+    def test_clinical_mortality_is_separate_from_complete(self):
+        result = calculate_rockall(age=65, shock_hr=70, shock_sbp=130)
+        assert result["clinical_score"] == 1
+        assert result["clinical_mortality_percent"] == 2.4
+        assert result["mortality_percent"] is None
+        assert result["total_score"] is None
 
-    def test_mortality_score_1(self):
-        result = calculate_rockall(age=65)
-        assert result["total_score"] == 1
-        assert result["mortality_percent"] == 0.4
-
-    def test_mortality_score_2(self):
-        result = calculate_rockall(age=85)
-        assert result["total_score"] == 2
-        assert result["mortality_percent"] == 2.2
-
-    def test_mortality_score_3(self):
-        result = calculate_rockall(age=85, shock_hr=110, shock_sbp=120)
-        assert result["total_score"] == 3
-        assert result["mortality_percent"] == 3.3
-
-    def test_mortality_score_4(self):
+    def test_clinical_mortality_score_four(self):
         result = calculate_rockall(age=85, shock_sbp=85)
-        assert result["total_score"] == 4
-        assert result["mortality_percent"] == 5.3
+        assert result["clinical_score"] == 4
+        assert result["clinical_mortality_percent"] == 24.6
 
-    def test_mortality_score_9_plus(self):
+    def test_complete_mortality_and_rebleeding(self):
+        result = calculate_rockall(
+            age=40, shock_hr=70, shock_sbp=120, comorbidity="none",
+            endoscopic_diagnosis="none", major_stigmata="none",
+        )
+        assert result["total_score"] == 0
+        assert result["mortality_percent"] == 0.0
+        assert result["rebleeding_percent"] == 4.9
+
+    def test_scores_eight_to_eleven_use_grouped_cohort(self):
         result = calculate_rockall(
             age=85, shock_sbp=80, comorbidity="major",
             endoscopic_diagnosis="cancer", major_stigmata="active_bleeding",
         )
-        assert result["total_score"] >= 9
-        assert result["mortality_percent"] == 27.0
+        assert result["total_score"] == 11
+        assert result["mortality_percent"] == 41.1
+        assert result["rebleeding_percent"] == 41.8
 
 
 # =============================================================================
@@ -187,21 +184,16 @@ class TestMortalityRisk:
 # =============================================================================
 
 class TestRiskCategory:
-    def test_low_risk(self):
+    def test_no_full_risk_label_without_endoscopy(self):
         result = calculate_rockall(age=40, shock_sbp=130, shock_hr=70)
-        assert result["risk_category"] == "Low"
+        assert result["risk_category"] is None
 
-    def test_moderate_risk(self):
-        result = calculate_rockall(age=85, shock_hr=110, shock_sbp=120,
-                                   endoscopic_diagnosis="peptic_ulcer")
-        assert result["risk_category"] == "Moderate"
-
-    def test_very_high_risk(self):
+    def test_higher_complete_score_is_labelled(self):
         result = calculate_rockall(
             age=85, shock_sbp=80, comorbidity="major",
             endoscopic_diagnosis="cancer", major_stigmata="active_bleeding",
         )
-        assert result["risk_category"] == "Very High"
+        assert result["risk_category"] == "Higher score"
 
 
 # =============================================================================
@@ -274,11 +266,13 @@ class TestFromDict:
     def test_from_dict_basic(self):
         params = {"age": "70", "sbp": "85", "comorbidity": "cardiac"}
         result = calculate_rockall_from_dict(params)
-        assert result["total_score"] > 0
+        assert result["partial_score"] > 0
+        assert result["total_score"] is None
 
     def test_from_dict_empty(self):
         result = calculate_rockall_from_dict({})
-        assert result["total_score"] == 0
+        assert result["partial_score"] == 0
+        assert result["total_score"] is None
 
 
 # =============================================================================
@@ -295,29 +289,29 @@ class TestInputValidation:
             calculate_rockall(age=200)
 
     def test_negative_hr_raises(self):
-        with pytest.raises(ValueError, match="Heart rate must be between"):
+        with pytest.raises(ValueError, match="Heart rate must be greater than"):
             calculate_rockall(shock_hr=-10)
 
     def test_unrealistic_hr_raises(self):
-        with pytest.raises(ValueError, match="Heart rate must be between"):
+        with pytest.raises(ValueError, match="Heart rate must be greater than"):
             calculate_rockall(shock_hr=400)
 
     def test_negative_sbp_raises(self):
-        with pytest.raises(ValueError, match="Systolic BP must be between"):
+        with pytest.raises(ValueError, match="Systolic BP must be greater than"):
             calculate_rockall(shock_sbp=-50)
 
     def test_unrealistic_sbp_raises(self):
-        with pytest.raises(ValueError, match="Systolic BP must be between"):
+        with pytest.raises(ValueError, match="Systolic BP must be greater than"):
             calculate_rockall(shock_sbp=350)
 
     def test_valid_boundary_values(self):
         # Minimal valid values (no shock since sbp >= 100)
-        result = calculate_rockall(age=0, shock_hr=0, shock_sbp=100)
-        assert result["total_score"] == 0
+        result = calculate_rockall(age=0, shock_hr=1, shock_sbp=100)
+        assert result["partial_score"] == 0
 
         # Maximum valid values
         result = calculate_rockall(age=150, shock_hr=300, shock_sbp=300)
-        assert result["total_score"] > 0
+        assert result["partial_score"] > 0
 
 
 # =============================================================================
