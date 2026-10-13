@@ -37,4 +37,4 @@ def test_sensitive_logs_disabled_by_default(monkeypatch):
 
 def test_frontend_points_to_bundled_html():
     response = frontend()
-    assert response.path.endswith("index.html")
+    assert str(response.path).endswith("index.html")
