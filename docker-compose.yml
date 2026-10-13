@@ -1,17 +1,9 @@
-version: '3.8'
-
 services:
   rockall-ugib-score:
     build: .
-    container_name: rockall-ugib-score
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
-      - AUDIT_SECRET_KEY=${AUDIT_SECRET_KEY:-please-change-me-in-production}
-      - MODEL_PROVIDER=mock
+      AUDIT_SECRET_KEY: "${AUDIT_SECRET_KEY:?Set AUDIT_SECRET_KEY for the audit service}"
+      ENABLE_AUDIT_LOGS: "0"
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3

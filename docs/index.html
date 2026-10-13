@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Calculate pre-endoscopy and complete Rockall scores for upper gastrointestinal bleeding, locally in your browser.">
+<title>Rockall Score | Upper GI Bleeding</title>
+<style>
+:root{color-scheme:light;--bg:#f5f7fb;--surface:#fff;--ink:#172535;--muted:#506477;--line:#d7e1e9;--blue:#165c9a;--soft:#e9f2fa}
+*{box-sizing:border-box}body{background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;margin:0}
+main{width:min(1040px,calc(100% - 32px));margin:32px auto 56px}h1{font-size:clamp(1.6rem,3vw,2.1rem);letter-spacing:-.035em;margin:.25rem 0}
+h2{font-size:1.13rem;margin:0 0 1rem}h3{font-size:1rem;margin:1rem 0 .4rem}p{margin:.5rem 0 1rem}small,.muted{color:var(--muted)}
+.eyebrow{font-size:.79rem;letter-spacing:.11em;font-weight:700;text-transform:uppercase;color:var(--blue)}
+.grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(290px,1fr);gap:20px;align-items:start;margin-top:20px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:0 4px 16px #16354f08}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.field{display:flex;flex-direction:column;gap:5px}.field.wide{grid-column:1/-1}label,.label{font-size:.88rem;font-weight:650}
+input,select{border-radius:8px;border:1px solid #9bacbb;padding:10px 12px;background:#fff;color:var(--ink);font:inherit;max-width:100%;width:100%}
+input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid #6ab2e3;outline-offset:2px}
+fieldset{border:0;padding:0;margin:18px 0 4px}legend{font-weight:700;margin-bottom:10px}
+.toggle{display:flex;align-items:center;gap:9px}.toggle input{width:auto}
+button{border-radius:8px;cursor:pointer;padding:12px 16px;font:inherit;font-weight:700;border:1px solid var(--blue)}
+button.primary{color:#fff;background:var(--blue)}button.secondary{color:var(--blue);background:#fff}
+.actions{display:flex;gap:10px;margin-top:24px}.actions button{flex:1}
+.score{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--line);padding:15px 0}.score:first-child{padding-top:0}
+.score strong{font-size:2.2rem;font-variant-numeric:tabular-nums;line-height:1.15;color:#0b567e}
+.score span{font-size:.88rem;color:var(--muted)}
+.frequencies{background:var(--soft);border-radius:10px;padding:13px 15px;margin-top:16px}.frequencies p{margin:.35rem 0}
+.error{border:1px solid #ba4545;color:#8c2626;background:#fff0f0;border-radius:9px;padding:10px 13px}
+.notice{border-left:4px solid #d1a043;padding-left:14px;margin-top:18px;color:#3c4650}
+dl{display:grid;grid-template-columns:1fr auto;gap:6px 16px;margin:12px 0}dt{color:var(--muted)}dd{margin:0;font-variant-numeric:tabular-nums;font-weight:700}
+footer{margin-top:22px;color:var(--muted);font-size:.89rem}a{color:var(--blue)}[hidden]{display:none!important}
+@media(max-width:750px){.grid{grid-template-columns:1fr}main{margin-top:20px}.panel{padding:18px}}
+@media(max-width:420px){.fields{grid-template-columns:1fr}.actions{flex-direction:column}}
+@media print{body{background:#fff}main{width:auto;margin:0}.panel{box-shadow:none}.actions{display:none}a{color:inherit}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="eyebrow">Clinical scoring · Educational reference</div>
+<h1>Rockall Score for Upper Gastrointestinal Bleeding</h1>
+<p class="muted">Calculate the clinical (0–7) or complete post-endoscopy (0–11) Rockall score. All calculations run locally in this browser.</p>
+</header>
+<div class="grid">
+<section class="panel" aria-labelledby="inputs-heading">
+<h2 id="inputs-heading">Patient measurements and findings</h2>
+<form id="calculator">
+<div class="fields">
+<div class="field"><label for="age">Age (years)</label><input id="age" name="age" type="number" min="0" max="150" step="1" required inputmode="numeric" placeholder="e.g. 65"></div>
+<div class="field"><label for="hr">Heart rate (beats/min)</label><input id="hr" name="hr" type="number" min="1" max="300" step="any" required placeholder="e.g. 105"></div>
+<div class="field"><label for="sbp">Systolic BP (mmHg)</label><input id="sbp" name="sbp" type="number" min="1" max="300" step="any" required placeholder="e.g. 110"></div>
+<div class="field"><label for="comorbidity">Most severe comorbidity</label>
+<select id="comorbidity" required>
+<option value="" disabled selected>Select a category</option>
+<option value="none">None — 0</option>
+<option value="cardiac">Cardiac failure / IHD — 2</option>
+<option value="other_major">Other major comorbidity — 2</option>
+<option value="major">Renal/liver failure or disseminated malignancy — 3</option>
+</select></div>
+</div>
+<fieldset><legend>Endoscopy</legend>
+<label class="toggle" for="endoscopy"><input id="endoscopy" type="checkbox"> Include endoscopic findings (complete Rockall)</label>
+</fieldset>
+<div class="fields" id="endoscopic-fields" hidden>
+<div class="field"><label for="diagnosis">Endoscopic diagnosis</label>
+<select id="diagnosis">
+<option value="none">No lesion and no bleeding stigmata — 0</option>
+<option value="mallory_weiss">Mallory–Weiss tear — 0</option>
+<option value="other">All other diagnoses — 1</option>
+<option value="cancer">Upper GI malignancy — 2</option>
+</select></div>
+<div class="field"><label for="stigmata">Stigmata of recent haemorrhage</label>
+<select id="stigmata">
+<option value="none">None / dark spot only — 0</option>
+<option value="blood">Blood, adherent clot, visible/spurting vessel — 2</option>
+</select></div>
+</div>
+<div class="actions"><button class="primary" type="submit">Calculate Rockall score</button><button class="secondary" type="reset">Clear</button></div>
+</form>
+</section>
+<section class="panel" aria-labelledby="results-heading">
+<h2 id="results-heading">Score result</h2>
+<div id="empty-state" class="muted">Enter clinical measurements and select Calculate. Endoscopy is optional.</div>
+<p id="error" class="error" role="alert" hidden></p>
+<div id="result" aria-live="polite" hidden>
+<div class="score"><strong id="clinical-score"></strong><span>Clinical / pre-endoscopy score (out of 7)</span></div>
+<div class="score" id="complete-row" hidden><strong id="complete-score"></strong><span>Complete / post-endoscopy score (out of 11)</span></div>
+<h3>Component breakdown</h3>
+<dl><dt>Age</dt><dd id="points-age"></dd><dt>Shock</dt><dd id="points-shock"></dd><dt>Comorbidity</dt><dd id="points-comorbidity"></dd>
+<dt id="label-diagnosis" hidden>Endoscopic diagnosis</dt><dd id="points-diagnosis" hidden></dd><dt id="label-stigmata" hidden>Recent haemorrhage stigmata</dt><dd id="points-stigmata" hidden></dd></dl>
+<div class="frequencies"><strong>Original-cohort observed outcomes</strong>
+<p>Mortality: <b id="mortality"></b></p><p id="rebleeding-row" hidden>Rebleeding: <b id="rebleeding"></b></p>
+<small id="frequency-context"></small></div>
+</div>
+<p class="notice"><strong>Clinical limitation.</strong> These percentages describe the historical development cohort, not a patient's predicted probability. Rockall alone should not determine admission, discharge, ICU placement or therapy. For initial assessment, current ACG and ESGE guidance favors Glasgow–Blatchford scoring together with clinical judgment.</p>
+</section>
+</div>
+<footer>
+<p><strong>Sources:</strong> <a href="https://pubmed.ncbi.nlm.nih.gov/8675081/" rel="noopener noreferrer">Rockall et al., Gut (1996)</a>; <a href="https://ovesco.com/complete-rockall-score/" rel="noopener noreferrer">original-cohort outcome table</a>; <a href="https://pubmed.ncbi.nlm.nih.gov/33929377/" rel="noopener noreferrer">ACG (2021)</a>; <a href="https://www.esge.com/endoscopic-diagnosis-and-management-of-nonvariceal-upper-gastrointestinal-hemorrhage-esge-update-2021" rel="noopener noreferrer">ESGE (2021)</a>.</p>
+<p>No data is uploaded, saved, or sent to an API by this page. Do not enter names or patient identifiers.</p>
+</footer>
+</main>
+<script>
+"use strict";
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const preMortality = [0.2, 2.4, 5.6, 11, 24.6, 39.6, 48.9, 50];
+  const fullMortality = [0, 0, 0.2, 2.9, 5.3, 10.8, 17.3, 27];
+  const fullRebleeding = [4.9, 3.4, 5.3, 11.2, 14.1, 24.1, 32.9, 43.8];
+  const comorbidityPoints = {none:0, cardiac:2, other_major:2, major:3};
+  const diagnosisPoints = {none:0, mallory_weiss:0, other:1, cancer:2};
+  const stigmataPoints = {none:0, blood:2};
+  const form = $("calculator");
+  const toggle = $("endoscopy");
+  function clearResult() {
+    $("result").hidden = true;
+    $("error").hidden = true;
+    $("empty-state").hidden = false;
+  }
+  toggle.addEventListener("change", function () {
+    $("endoscopic-fields").hidden = !toggle.checked;
+    clearResult();
+  });
+  form.addEventListener("reset", function () {
+    $("endoscopic-fields").hidden = true;
+    clearResult();
+  });
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    clearResult();
+    const age = Number($("age").value);
+    const hr = Number($("hr").value);
+    const sbp = Number($("sbp").value);
+    if (!Number.isInteger(age) || age < 0 || age > 150 ||
+        !Number.isFinite(hr) || hr <= 0 || hr > 300 ||
+        !Number.isFinite(sbp) || sbp <= 0 || sbp > 300) {
+      $("error").textContent = "Enter a valid whole-number age, heart rate and systolic blood pressure.";
+      $("error").hidden = false;
+      return;
+    }
+    const agePoints = age >= 80 ? 2 : age >= 60 ? 1 : 0;
+    const shockPoints = sbp < 100 ? 2 : hr >= 100 ? 1 : 0;
+    const comorbPoints = comorbidityPoints[$("comorbidity").value];
+    if (!Number.isInteger(comorbPoints)) {
+      $("error").textContent = "Select the applicable comorbidity category.";
+      $("error").hidden = false;
+      return;
+    }
+    const clinical = agePoints + shockPoints + comorbPoints;
+    const withEndoscopy = toggle.checked;
+    const diagnosis = $("diagnosis").value;
+    const stigmata = $("stigmata").value;
+    if (withEndoscopy && diagnosis === "none" && stigmata !== "none") {
+      $("error").textContent = "No lesion with major recent-bleeding stigmata is inconsistent. Choose an applicable diagnosis.";
+      $("error").hidden = false;
+      return;
+    }
+    const full = clinical + (withEndoscopy ? diagnosisPoints[diagnosis] + stigmataPoints[stigmata] : 0);
+    $("clinical-score").textContent = String(clinical);
+    $("complete-row").hidden = !withEndoscopy;
+    $("complete-score").textContent = String(full);
+    $("points-age").textContent = String(agePoints);
+    $("points-shock").textContent = String(shockPoints);
+    $("points-comorbidity").textContent = String(comorbPoints);
+    ["label-diagnosis","points-diagnosis","label-stigmata","points-stigmata"].forEach(
+      function (id) { $(id).hidden = !withEndoscopy; }
+    );
+    $("points-diagnosis").textContent = String(diagnosisPoints[diagnosis]);
+    $("points-stigmata").textContent = String(stigmataPoints[stigmata]);
+    const mortality = withEndoscopy ? (full >= 8 ? 41.1 : fullMortality[full]) : preMortality[clinical];
+    $("mortality").textContent = mortality + "%";
+    $("rebleeding-row").hidden = !withEndoscopy;
+    $("rebleeding").textContent = (full >= 8 ? 41.8 : fullRebleeding[full]) + "%";
+    $("frequency-context").textContent = withEndoscopy ?
+      "Based on complete Rockall score. Scores 8–11 were grouped as ≥8 in the original cohort." :
+      "Based on the clinical/pre-endoscopy score only. Rebleeding rates are not shown without endoscopy.";
+    $("empty-state").hidden = true;
+    $("result").hidden = false;
+  });
+})();
+</script>
+</body>
+</html>
