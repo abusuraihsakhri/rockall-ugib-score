@@ -1,112 +1,158 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Rockall Ugib Score API",
-    "description": "Enterprise Distributed Component Platform (Clinical & Cryptographic AI) adhering to CAP / CLSI / NIST Standards.",
-    "version": "3.0.0-ENTERPRISE",
-    "contact": {
-      "name": "Dr. Abu Suraih Sakhri",
-      "url": "https://github.com/abusuraihsakhri"
-    }
+    "title": "Rockall UGIB Score API",
+    "version": "1.1.0",
+    "description": "Local Rockall scoring endpoint and optional legacy audit/chat utilities. Rockall cohort rates are historical frequencies, not individual risk estimates."
   },
   "paths": {
-    "/health": {
+    "/": {
       "get": {
-        "summary": "Health and metadata check",
+        "summary": "Serve standalone Rockall calculator",
         "responses": {
           "200": {
-            "description": "System optimal"
+            "description": "Static HTML calculator",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Service health metadata"
           }
         }
       }
     },
     "/metrics": {
       "get": {
-        "summary": "Prometheus operational metrics",
+        "summary": "Local process metrics",
         "responses": {
           "200": {
-            "description": "Prometheus text metrics"
+            "description": "JSON counters and status"
+          }
+        }
+      }
+    },
+    "/api/score": {
+      "post": {
+        "summary": "Calculate clinical and complete Rockall scores from available findings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScoreRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Score components, completeness flags, available totals and historical outcome frequencies"
+          },
+          "422": {
+            "description": "Invalid or inconsistent score input"
           }
         }
       }
     },
     "/api/audit": {
       "post": {
-        "summary": "Dispatch task payload across specialized workers",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "task_id": {
-                    "type": "string"
-                  },
-                  "target_identifier": {
-                    "type": "string"
-                  },
-                  "primary_metric": {
-                    "type": "number"
-                  },
-                  "secondary_metric": {
-                    "type": "number"
-                  },
-                  "status_descriptor": {
-                    "type": "string"
-                  },
-                  "is_critical_flag": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "task_id",
-                  "target_identifier",
-                  "primary_metric"
-                ]
-              }
-            }
-          }
-        },
+        "summary": "Legacy non-clinical audit utility",
+        "description": "A generic threshold demo, not UGIB score logic. Protected network use only.",
         "responses": {
           "200": {
-            "description": "Consensus dossier with HMAC signature"
+            "description": "Audit dossier"
+          },
+          "422": {
+            "description": "Invalid input or sensitive identifier"
           }
         }
       }
     },
     "/api/chat": {
       "post": {
-        "summary": "Air-gapped supervisory conversational assistant",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "query": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "query"
-                ]
-              }
-            }
-          }
-        },
+        "summary": "Legacy deterministic mock reply",
+        "description": "Does not perform scientific verification or score calculation.",
         "responses": {
           "200": {
-            "description": "Supervisory response"
+            "description": "Mock reply"
           }
         }
       }
     },
     "/api/audit/logs": {
       "get": {
-        "summary": "Retrieve and cryptographically verify HMAC audit trail",
+        "summary": "Legacy in-memory HMAC audit log",
+        "description": "Disabled unless ENABLE_AUDIT_LOGS=1; not durable or access controlled.",
         "responses": {
           "200": {
-            "description": "Cryptographic audit trail"
+            "description": "Audit chain"
+          },
+          "403": {
+            "description": "Audit logs disabled"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ScoreRequest": {
+        "type": "object",
+        "properties": {
+          "age": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 150
+          },
+          "shock_hr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0,
+            "maximum": 300
+          },
+          "shock_sbp": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0,
+            "maximum": 300
+          },
+          "comorbidity": {
+            "type": "string",
+            "default": "none",
+            "description": "none, cardiac, other_major, major and recognized aliases"
+          },
+          "endoscopic_diagnosis": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "none, mallory_weiss, other, peptic_ulcer, cancer and recognized aliases"
+          },
+          "major_stigmata": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "none, dark_spot, blood, visible_vessel, active_bleeding and recognized aliases"
           }
         }
       }

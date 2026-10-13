@@ -25,7 +25,7 @@ PHI_PATTERNS = [
 
 
 class SecurityException(Exception):
-    """Raised when outbound data violates HIPAA Safe Harbor or contains raw PHI."""
+    """Raised when text matches a configured sensitive-identifier pattern."""
     pass
 
 
@@ -62,7 +62,7 @@ class AuditTrail:
         if not resolved_key:
             import warnings
             warnings.warn(
-                "AUDIT_SECRET_KEY not set. Using ephemeral default - audit trail will not persist across restarts. "
+                "AUDIT_SECRET_KEY not set. Using an ephemeral HMAC key. Audit logs remain in memory only. "
                 "Set the AUDIT_SECRET_KEY environment variable in production.",
                 stacklevel=2,
             )
